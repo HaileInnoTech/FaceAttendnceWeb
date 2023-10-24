@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registration Page</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row">
+            <div class="col-md-6">
+                <h1>Webcam</h1>
+                <video id="video" width="100%" autoplay></video>
+                <button id="captureBtn" class="btn btn-primary mt-3">Take Photo</button>
+                <button id="resetBtn" class="btn btn-danger mt-3">Reset</button>
+            </div>
+            <div class="col-md-6">
+                <h1>Register</h1>
+                <form action="/submit" method="post" id="registrationForm" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="name">Name</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+                     <div class="form-group">
+                        <label for="studentID">Student ID</label>
+                        <input type="text" class="form-control" id="studentID" name="studentID" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" class="form-control" id="email" name="email" required>
+                    </div>
+                    <input type="hidden" id="capturedPhoto" name="capturedPhoto" value="">
+                    <button id="submitButton" type="submit" class="btn btn-primary">Submit</button>                </form>
+                 <div class="alert alert-success alert-dismissible fade show" role="alert" style="display:none;" id="successAlert">
+        <span id="successMessage"></span>
+
+    </div>
+                <h2 class="mt-4">Captured Photo (Resized to 16x16)</h2>
+                <div id="photoContainer"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.3/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+    <script>
+        let videoStream;
+
+        function startWebcam() {
+    navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+            const video = document.getElementById('video');
+            videoStream = stream;
+            video.srcObject = stream;
+        })
+        .catch(err => console.error('Error accessing the webcam: ', err));
+}
+
+// Call startWebcam when the page loads
+window.addEventListener('load', startWebcam);
+let capturedImage; // Define the captured image variable
+
+document.getElementById('captureBtn').addEventListener('click', () => {
+    const video = document.getElementById('video');
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    const newWidth = video.videoWidth / 2;
+    const newHeight = video.videoHeight / 2;
+    canvas.width = newWidth;
+    canvas.height = newHeight;
+    context.drawImage(video, 0, 0, newWidth, newHeight);
+    const photoDataUrl = canvas.toDataURL('image/jpeg');
+    const capturedPhotoInput = document.getElementById('capturedPhoto');
+    capturedPhotoInput.value = photoDataUrl;
+    // Display the resized image
+    const img = new Image();
+    img.src = photoDataUrl;
+    img.onload = () => {
+        const imgContainer = document.getElementById('photoContainer');
+        imgContainer.innerHTML = '';
+        imgContainer.appendChild(img);
+        capturedImage = img; // Store the captured image
+    }
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+    const imgContainer = document.getElementById('photoContainer');
+    imgContainer.innerHTML = ''; // Clear the contents of the container
+    stopWebcam();
+    startWebcam();
+
+    if (capturedImage) {
+        imgContainer.appendChild(capturedImage); // Re-add the captured image
+    }
+});
+        window.addEventListener('beforeunload', () => {
+            stopWebcam();
+        });
+
+       function showAlert(message) {
+            const successAlert = document.getElementById('successAlert');
+            const successMessage = document.getElementById('successMessage');
+
+            successMessage.textContent = message;
+            successAlert.style.display = 'block';
+            window.scrollTo(0, 0);
+
+            setTimeout(function(){
+                successAlert.style.display = 'none';
+            }, 3000);
+        }
+
+       document.getElementById('registrationForm').addEventListener('submit', (event) => {
+    const name = document.getElementById('name').value;
+    const studentID = document.getElementById('studentID').value;
+    const email = document.getElementById('email').value;
+     const capturedPhotoInput = document.getElementById('capturedPhoto');
+    const capturedPhotoData = capturedPhotoInput.value;
+    if (!name || !studentID || !email) {
+        event.preventDefault(); // Prevent form submission if any field is empty
+        showAlert('Please fill in all fields.');
+    } else {
+        showAlert('Registration successful!');
+    }
+    if (!capturedPhotoData) {
+        event.preventDefault(); // Prevent form submission if no photo is captured
+        showAlert('Please capture a photo.');
+    }
+});
+
+
+    </script>
+</body>
+</html>
