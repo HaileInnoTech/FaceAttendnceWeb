@@ -13,9 +13,15 @@
             <h1>Webcam</h1>
             <img src="{{ url_for('video_feed') }}" width="450" height="auto">
         </div>
+
+
         <div class="col-md-6">
             <h1>Register</h1>
             <a href="/register" class="btn btn-primary">Register</a>
+            <button id="syncData" class="btn btn-success mt">Sync Data</button>
+            <div id="loadingSpinner" class="spinner-border text-success" role="status" style="display: none;">
+                <span class="sr-only">Loading...</span>
+            </div>
         </div>
     </div>
 </div>
@@ -31,6 +37,32 @@
             video.srcObject = stream;
         })
         .catch(err => console.error('Error accessing the webcam: ', err));
+
+
+    document.addEventListener('DOMContentLoaded', function () {
+        document.getElementById('syncData').addEventListener('click', function (event) {
+            event.preventDefault(); // Prevent the default form submission behavior
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/sync_data', true);
+
+            // Show the loading spinner
+            document.getElementById('loadingSpinner').style.display = 'inline-block';
+            xhr.onload = function () {
+                if (xhr.status === 200) {
+                    console.log('Task started successfully');
+                    document.getElementById('loadingSpinner').style.display = 'none';
+
+                } else {
+                    console.error('Error starting task');
+                }
+
+            };
+            xhr.send();
+
+        });
+    });
+
+
 </script>
 </body>
 </html>

@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, make_response, Response
 import os
 import cvzone
+from threading import Thread
 import shutil
 import numpy as np
 from datetime import datetime
@@ -36,7 +37,7 @@ if not os.path.exists(UPLOAD_FOLDER):
 video = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 
 def generate_frames():
-    encodeGenerator()
+    # encodeGenerator()
     time.sleep(5)
     print("Loading Encode File ...")
     file = open('EncoderFile.p', 'rb')
@@ -102,12 +103,20 @@ def submit():
     name = request.form['name']
     stuId = request.form['studentID']
     email = request.form['email']
-    imageData64 = request.form['capturedPhoto']
-    uploadNewUser(stuId, name, email)
-    photo_binary = base64.b64decode(imageData64.split(',')[1])
-    uploadNewFace(photo_binary, stuId)
-    time.sleep(5)
-    return redirect(url_for('index'))
+
+    IDList = retrieveIDList()
+    IDList = list(data.keys())
+    print(data)
+    number = 'sws00129'
+    if stuId in IDList:
+        return "ID already exists. Please choose a different one."
+    else:
+        imageData64 = request.form['capturedPhoto']
+        uploadNewUser(stuId, name, email)
+        photo_binary = base64.b64decode(imageData64.split(',')[1])
+        uploadNewFace(photo_binary, stuId)
+        time.sleep(5)
+        return redirect(url_for('index'))
 def uploadNewUser(stuId, name, email):
     ref = db.reference('FaceInformation')
     users_ref = ref.child(f'{stuId}')
@@ -173,8 +182,6 @@ def encodeGenerator():
     pickle.dump(encodeListKnownWithIds, file)
     file.close()
     print("File Saved")
-
-
 def updateAttendence(stuId, name, email):
     current = current_date
     data = retrieveAttendence(stuId)
@@ -203,10 +210,25 @@ def updateAttendence(stuId, name, email):
             'Times': str(counter)
         })
         print('Check In Succesfully')
-
-
 def retrieveAttendence(stuId):
     ref = db.reference(f'FaceAttendence/{stuId}')
     return ref.get()
+
+
+def retrieveIDList():
+    ref = db.reference(f'FaceInformation/')
+    data = ref.order_by_key().get()
+    return data
+
+
+@app.route('/sync_data', methods=['get'])
+def sync_data():
+    print("Processing")
+    encodeGenerator()
+    generate_frames()
+    response = make_response('')
+    response.status_code = 200
+    return response
+
 if __name__ == '__main__':
     app.run(debug=True)
