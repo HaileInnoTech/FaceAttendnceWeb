@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, make_response, Response
 import os
 import cvzone
+import shutil
 import numpy as np
 from datetime import datetime
 import time
@@ -32,8 +33,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
-video = cv2.VideoCapture(0)
-
+video = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 
 def generate_frames():
     encodeGenerator()
@@ -45,37 +45,43 @@ def generate_frames():
     encodeListKnown, peopleIds = encodeListKnownWithIds
     # print(peopleIds)
     print(" File Loaded")
-
     while video.isOpened():
         success, frame = video.read()
         if success:
             imgS = cv2.resize(frame, (0, 0), None, 0.25, 0.25)
             imgS = cv2.cvtColor(imgS, cv2.COLOR_BGR2RGB)
-
             faceCurFrame = face_recognition.face_locations(imgS)
             enCodeCurFrame = face_recognition.face_encodings(imgS, faceCurFrame)
 
             for encodeFace, faceLoc in zip(enCodeCurFrame, faceCurFrame):
                 matches = face_recognition.compare_faces(encodeListKnown, encodeFace)
                 faceDis = face_recognition.face_distance(encodeListKnown, encodeFace)
+                print(matches)
+                print(faceDis)
                 matchIndex = np.argmin(faceDis)
-                if matches[matchIndex]:
+                if faceDis[matchIndex] < 0.5:
                     y1, x2, y2, x1 = faceLoc
                     y1, x2, y2, x1 = y1 * 4, x2 * 4, y2 * 4, x1 * 4
                     bbox = x1, y1, x2 - x1, y2 - y1
                     cvzone.cornerRect(frame, bbox, rt=0)
                     id = peopleIds[matchIndex]
-                    name = retrieveData(id)
-                    font = cv2.FONT_HERSHEY_SIMPLEX
-                    font_scale = 0.5
-                    font_thickness = 1
-                    font_color = (255, 255, 255)  # White color
+                    data = retrieveAttendence(id)
+                    name = data['Full_Name']
+                    last_CheckIn = data['Last_check']
+                    updateAttendence(stuId=data['ID'], name=data['Full_Name'],
+                                     email=data['Email'])  # bị update liên tục, cần chạy 1 lần
                     position = (x1, y1 - 10)  # Above the bounding box
+                    last_checkin_position = (x1, y1 + 30)
+                    cv2.putText(frame, name, position, cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 2)
+                    cv2.putText(frame, last_CheckIn, last_checkin_position,
+                                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 2)
 
-                    # Draw the name on the image
-                    cv2.putText(frame, name, position, font, font_scale, font_color, font_thickness,
-                                lineType=cv2.LINE_AA)
-
+                else:
+                    y1, x2, y2, x1 = faceLoc
+                    y1, x2, y2, x1 = y1 * 4, x2 * 4, y2 * 4, x1 * 4
+                    bbox = x1, y1, x2 - x1, y2 - y1
+                    cvzone.cornerRect(frame, bbox, rt=0)
+                    cv2.putText(frame, 'Unknown', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
             ret, buffer = cv2.imencode('.jpg', frame)
             frame = buffer.tobytes()
             yield (b'--frame\r\n'
@@ -85,18 +91,12 @@ def generate_frames():
 @app.route('/')
 def index():
     return render_template('index.html')
-
-
 @app.route('/video_feed')
 def video_feed():
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
-
 @app.route('/register')
 def register():
     return render_template('register.html')
-
-
 @app.route('/submit', methods=['POST'])
 def submit():
     name = request.form['name']
@@ -108,8 +108,6 @@ def submit():
     uploadNewFace(photo_binary, stuId)
     time.sleep(5)
     return redirect(url_for('index'))
-
-
 def uploadNewUser(stuId, name, email):
     ref = db.reference('FaceInformation')
     users_ref = ref.child(f'{stuId}')
@@ -120,15 +118,25 @@ def uploadNewUser(stuId, name, email):
         'Date Register': current_date,
         'Email': f'{email}',
     })
-
-
+    ref = db.reference('FaceAttendnce')
+    users_ref = ref.child(f'{stuId}')
+    users_ref.set({
+        'ID': f'{stuId}',
+        'Image': f'{stuId}.png',
+        'Full_Name': f'{name}',
+        'Email': f'{email}',
+    })
 def uploadNewFace(photo_binary, stuId):
     bucket = storage.bucket()
     blob = bucket.blob(f'Images/{stuId}.png')
     blob.upload_from_string(photo_binary, content_type='image/png')
-
-
 def encodeGenerator():
+    myfir = "Images"
+    shutil.rmtree(myfir)
+    time.sleep(5)
+    # if file.endswith('.png'):
+    #     os.remove(file)
+    #     print('Delete file ok')
     bucket = storage.bucket()
     blob_names = [blob.name for blob in bucket.list_blobs(max_results=50)]
     results = transfer_manager.download_many_to_path(bucket, blob_names, max_workers=8)
@@ -167,10 +175,38 @@ def encodeGenerator():
     print("File Saved")
 
 
-def retrieveData(stuId):
-    ref = db.reference(f'FaceInformation/{stuId}/Full_Name')
+def updateAttendence(stuId, name, email):
+    current = current_date
+    data = retrieveAttendence(stuId)
+    counter = int(data['Times'])
+    last = data['Attendent_time']
+    print(f'Last Check:{last}')
+
+    print(f'Current Check:{current}')
+    ref = db.reference('FaceAttendence')
+    users_ref = ref.child(f'{stuId}')
+    users_ref.update({
+        'ID': f'{stuId}',
+        'Image': f'{stuId}.png',
+        'Full_Name': f'{name}',
+        'Attendent_time': f'{current}',
+        'Last_check': f'{last}',
+        'Email': f'{email}',
+    })
+    last = datetime.strptime(last, '%m/%d/%Y %H:%M:%S')
+    current = datetime.strptime(current, '%m/%d/%Y %H:%M:%S')
+    if last.date() == current.date():
+        print('Already check In')
+    else:
+        counter += 1
+        users_ref.update({
+            'Times': str(counter)
+        })
+        print('Check In Succesfully')
+
+
+def retrieveAttendence(stuId):
+    ref = db.reference(f'FaceAttendence/{stuId}')
     return ref.get()
-
-
 if __name__ == '__main__':
     app.run(debug=True)
